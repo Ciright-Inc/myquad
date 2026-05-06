@@ -16,7 +16,7 @@
     "db:migrate:create": "prisma migrate dev --name",
     "db:deploy": "prisma migrate deploy",
     "db:deploy:seed": "prisma migrate deploy && prisma db seed",
-    "postinstall": "prisma generate"
+    "postinstall": "node -e \"const fs=require('fs'); const cp=require('child_process'); if(fs.existsSync('prisma/schema.prisma')){cp.execSync('prisma generate --schema=prisma/schema.prisma',{stdio:'inherit'});} else {console.log('Skipping prisma generate: prisma/schema.prisma not found in this build stage.');}\""
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
