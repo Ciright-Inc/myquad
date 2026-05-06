@@ -1,0 +1,94 @@
+<div class="min-h-screen">
+  <header class="border-b border-white/10 bg-gradient-to-r from-[#050a2f] via-[#060a32] to-[#11226b] text-white">
+    <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+      <div>
+        <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#4ea7f4]">Enterprise admin</p>
+        <h1 class="text-xl font-semibold">MyQuad operations</h1>
+      </div>
+      <a routerLink="/dashboard" class="rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold hover:bg-white/10"
+        >Dashboard</a
+      >
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-6xl space-y-6 px-4 py-8">
+    @if (loading) {
+      <p class="text-[#2c4f66]">Loading…</p>
+    }
+
+    @if (error) {
+      <p class="rounded-lg bg-[#fe0f26]/10 px-4 py-3 text-sm text-[#fe0f26]">{{ error }}</p>
+    }
+
+    @if (summary && !loading) {
+      <section class="grid gap-4 md:grid-cols-3">
+        <article class="mq-panel p-4">
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-[#2c4f66]">Open tasks</p>
+          <p class="mt-2 text-3xl font-semibold text-[#060a32]">{{ summary.openTaskCount }}</p>
+        </article>
+        <article class="mq-panel p-4">
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-[#2c4f66]">Unassigned</p>
+          <p class="mt-2 text-3xl font-semibold text-[#060a32]">{{ summary.unassignedCount }}</p>
+        </article>
+        <article class="mq-panel p-4">
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-[#2c4f66]">Overloaded (≥8)</p>
+          <p class="mt-2 text-3xl font-semibold text-[#060a32]">{{ summary.overloadedUsers.length }}</p>
+        </article>
+      </section>
+
+      <section class="mq-panel p-5">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-[#2c4f66]">Roster</h2>
+        <ul class="mt-3 divide-y divide-black/5">
+          @for (u of summary.roster; track u.id) {
+            <li class="flex items-center justify-between py-2 text-sm">
+              <span>{{ u.name }}</span>
+              <span class="text-black/55">{{ u.email }}</span>
+            </li>
+          }
+        </ul>
+      </section>
+
+      <section class="mq-panel p-5">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-[#2c4f66]">Tasks per lead</h2>
+        <ul class="mt-3 space-y-2 text-sm">
+          @for (kv of summary.byLead | keyvalue; track kv.key) {
+            <li class="flex justify-between rounded-lg border border-black/5 bg-[#f7f9fb] px-3 py-2">
+              <span>{{ kv.key === 'unassigned' ? 'Unassigned' : kv.key }}</span>
+              <span class="font-semibold">{{ kv.value }}</span>
+            </li>
+          }
+        </ul>
+      </section>
+
+      <section class="grid gap-6 md:grid-cols-2">
+        <div class="mq-panel p-5">
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-[#2c4f66]">Stuck in Q3 / Q4</h2>
+          <ul class="mt-3 space-y-2 text-sm">
+            @for (t of summary.stuckQuadrant34; track t.id) {
+              <li class="rounded-lg border border-black/5 px-3 py-2">
+                <div class="font-medium">{{ t.name }}</div>
+                <div class="text-black/55">Q{{ t.priorityQuadrant }} · {{ t.phase }}</div>
+              </li>
+            } @empty {
+              <li class="text-black/55">None surfaced.</li>
+            }
+          </ul>
+        </div>
+
+        <div class="mq-panel p-5">
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-[#2c4f66]">Upcoming due (7 days)</h2>
+          <ul class="mt-3 space-y-2 text-sm">
+            @for (t of summary.upcomingDue; track t.id) {
+              <li class="rounded-lg border border-black/5 px-3 py-2">
+                <div class="font-medium">{{ t.name }}</div>
+                <div class="text-black/55">{{ t.dueDateTime | date : 'medium' }}</div>
+              </li>
+            } @empty {
+              <li class="text-black/55">Nothing due soon.</li>
+            }
+          </ul>
+        </div>
+      </section>
+    }
+  </main>
+</div>

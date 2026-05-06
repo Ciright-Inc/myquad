@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountType {
+  INDIVIDUAL
+  ENTERPRISE
+}
+
+enum MembershipRole {
+  ADMIN
+  MEMBER
+}
+
+model User {
+  id               String        @id @default(cuid())
+  email            String        @unique
+  passwordHash     String
+  name             String
+  phone            String?
+  accountType      AccountType   @default(INDIVIDUAL)
+  organizationId   String?
+  organization     Organization? @relation(fields: [organizationId], references: [id])
+  memberships      Membership[]
+  createdTasks     Task[]        @relation("TaskCreatedBy")
+  leadTasks        Task[]        @relation("TaskLead")
+  taskNotes        TaskNote[]
+  documentsUploaded TaskDocument[]
+  activityLogs     TaskActivityLog[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model Organization {
+  id             String         @id @default(cuid())
+  name           String
+  users          User[]
+  memberships    Membership[]
+  subscriptions  Subscription[]
+  tasks          Task[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+model Membership {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  role           MembershipRole @default(MEMBER)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+model Subscription {
+  id               String        @id @default(cuid())
+  name             String
+  sourceSystem     String?
+  organizationId   String?
+  organization     Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tasks            Task[]
+  createdAt        DateTime      @default(now())
+}
+
+model Task {
+  id                  String    @id @default(cuid())
+  organizationId      String?
+  subscriptionId      String?
+  sourceSystem        String?
+  externalTaskId      String?
+
+  name                String
+  description         String?
+
+  priorityQuadrant    Int
+  timeEstimate        Int
+  complexity          Int
+  difficulty          Int
+
+  phase               String
+  dueDateTime         DateTime?
+
+  leadUserId          String?
+  associatedUserIds   String[]
+
+  isCCRComplete       Boolean   @default(false)
+  isInactive          Boolean   @default(false)
+
+  createdById         String
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organization        Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription        Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  createdBy           User          @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  leadUser            User?         @relation("TaskLead", fields: [leadUserId], references: [id])
+
+  notes               TaskNote[]
+  documents           TaskDocument[]
+  associations        TaskAssociation[]
+  leadHistory         TaskLeadHistory[]
+  activityLog         TaskActivityLog[]
+}
+
+model TaskNote {
+  id        String   @id @default(cuid())
+  taskId    String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+}
+
+model TaskDocument {
+  id           String   @id @default(cuid())
+  taskId       String
+  uploadedById String
+  fileName     String
+  mimeType     String?
+  url          String
+  createdAt    DateTime @default(now())
+
+  task       Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+}
+
+model TaskAssociation {
+  id               String  @id @default(cuid())
+  taskId           String
+  relatedTaskId    String?
+  externalSystemId String?
+  associationType  String  @default("related")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model TaskLeadHistory {
+  id                   String   @id @default(cuid())
+  taskId               String
+  previousLeadUserId   String?
+  newLeadUserId        String?
+  changedByUserId      String?
+  changedAt            DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model TaskActivityLog {
+  id          String   @id @default(cuid())
+  taskId      String
+  actorId     String?
+  action      String
+  detail      String?
+  createdAt   DateTime @default(now())
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id])
+}

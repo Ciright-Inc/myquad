@@ -1,0 +1,16 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+COPY prisma ./prisma
+
+RUN npm ci
+RUN npx prisma generate
+
+COPY server ./server
+COPY tsconfig*.json ./
+
+EXPOSE 3001
+
+CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx server/index.ts"]

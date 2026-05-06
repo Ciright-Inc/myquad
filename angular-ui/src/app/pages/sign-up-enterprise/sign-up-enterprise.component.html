@@ -1,0 +1,35 @@
+<div class="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-4 py-10">
+  <a routerLink="/sign-up" class="mb-6 text-sm font-semibold text-[#0c34da] hover:underline">← Account types</a>
+  <div class="mq-panel p-8">
+    <h1 class="text-2xl font-semibold text-[#060a32]">Enterprise tenant</h1>
+    <p class="mt-2 text-sm text-black/60">Creates organization, default Ciright subscriptions, and makes you org admin.</p>
+    @if (error) {
+      <p class="mt-4 rounded-lg bg-[#fe0f26]/10 px-3 py-2 text-sm text-[#fe0f26]">{{ error }}</p>
+    }
+    <form class="mt-6 space-y-4" (ngSubmit)="submit()">
+      <label class="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-[#2c4f66]">
+        Organization name
+        <input required class="rounded-lg border border-black/10 px-3 py-2.5 text-sm normal-case" [(ngModel)]="organizationName" name="org" />
+      </label>
+      <label class="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-[#2c4f66]">
+        Your name
+        <input required class="rounded-lg border border-black/10 px-3 py-2.5 text-sm normal-case" [(ngModel)]="name" name="name" />
+      </label>
+      <label class="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-[#2c4f66]">
+        Work email
+        <input type="email" required class="rounded-lg border border-black/10 px-3 py-2.5 text-sm normal-case" [(ngModel)]="email" name="email" />
+      </label>
+      <label class="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-[#2c4f66]">
+        Mobile (optional)
+        <input class="rounded-lg border border-black/10 px-3 py-2.5 text-sm normal-case" [(ngModel)]="phone" name="phone" />
+      </label>
+      <label class="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-[#2c4f66]">
+        Password
+        <input type="password" required minlength="8" class="rounded-lg border border-black/10 px-3 py-2.5 text-sm normal-case" [(ngModel)]="password" name="pw" />
+      </label>
+      <button type="submit" class="w-full rounded-lg bg-[#0c34da] py-3 text-sm font-semibold text-white shadow-lg shadow-[#0c34da]/25 hover:bg-[#0627ad]" [disabled]="busy">
+        Launch tenant
+      </button>
+    </form>
+  </div>
+</div>
