@@ -72,6 +72,7 @@
     "vite": "^8.0.10"
   },
   "prisma": {
+    "schema": "prisma/schema.prisma",
     "seed": "tsx prisma/seed.ts"
   }
 }
