@@ -3,15 +3,19 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import 'dotenv/config';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { AccountType, MembershipRole } from '@prisma/client';
 import { signToken } from './authTokens.js';
 import { prisma } from './db.js';
 import type { AuthedRequest } from './middleware/requireAuth.js';
 import { requireAuth } from './middleware/requireAuth.js';
 import { MockWorkItemProvider } from './providers/mock-work-item-provider.js';
+import { createTeam, deleteTeam, listTeams, updateTeam } from './teamStore.js';
 
 const mockProvider = new MockWorkItemProvider();
 const PORT = Number(process.env.PORT ?? 3001);
+const uploadDir = path.join(process.cwd(), 'uploads');
 
 async function checkOrgAdmin(userId: string, organizationId: string | null): Promise<boolean> {
   if (!organizationId) return false;
@@ -37,6 +41,7 @@ app.use(
 );
 app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
+app.use('/uploads', express.static(uploadDir));
 
 /** Helps confirm this process is the MyQuad API (not another app on the same port). */
 app.get('/', (_req, res) => {
@@ -300,6 +305,7 @@ app.get('/api/tasks/:id', requireAuth, async (req: AuthedRequest, res) => {
         orderBy: { createdAt: 'desc' },
       },
       documents: true,
+      associations: true,
       leadUser: { select: { id: true, name: true, email: true } },
       subscription: true,
     },
@@ -438,6 +444,25 @@ app.patch('/api/tasks/:id', requireAuth, async (req: AuthedRequest, res) => {
   res.json(task);
 });
 
+app.delete('/api/tasks/:id', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  const existing = await prisma.task.findFirst({
+    where: {
+      id: req.params.id,
+      ...(user.organizationId
+        ? { organizationId: user.organizationId }
+        : { createdById: user.id }),
+    },
+  });
+  if (!existing) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  await prisma.task.delete({ where: { id: existing.id } });
+  res.status(204).send();
+});
+
 app.post('/api/tasks/:id/notes', requireAuth, async (req: AuthedRequest, res) => {
   const user = req.user!;
   const existing = await prisma.task.findFirst({
@@ -502,21 +527,112 @@ app.post('/api/tasks/:id/documents', requireAuth, async (req: AuthedRequest, res
     res.status(404).json({ error: 'Not found' });
     return;
   }
-  const { fileName, url, mimeType } = req.body as { fileName?: string; url?: string; mimeType?: string };
-  if (!fileName || !url) {
-    res.status(400).json({ error: 'fileName and url required' });
+  const { fileName, url, mimeType, contentBase64 } = req.body as {
+    fileName?: string;
+    url?: string;
+    mimeType?: string;
+    contentBase64?: string;
+  };
+  if (!fileName || (!url && !contentBase64)) {
+    res.status(400).json({ error: 'fileName and either url or contentBase64 required' });
     return;
+  }
+  let finalUrl = url ?? '';
+  if (contentBase64) {
+    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '-');
+    const token = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const diskName = `${token}-${safeName}`;
+    const payload = contentBase64.includes(',') ? contentBase64.split(',')[1] : contentBase64;
+    const binary = Buffer.from(payload, 'base64');
+    await fs.mkdir(uploadDir, { recursive: true });
+    await fs.writeFile(path.join(uploadDir, diskName), binary);
+    finalUrl = `/uploads/${diskName}`;
   }
   const doc = await prisma.taskDocument.create({
     data: {
       taskId: existing.id,
       uploadedById: user.id,
       fileName,
-      url,
+      url: finalUrl,
       mimeType: mimeType ?? null,
     },
   });
   res.status(201).json(doc);
+});
+
+app.get('/api/tasks/:id/associations', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  const task = await prisma.task.findFirst({
+    where: {
+      id: req.params.id,
+      ...(user.organizationId ? { organizationId: user.organizationId } : { createdById: user.id }),
+    },
+  });
+  if (!task) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  const list = await prisma.taskAssociation.findMany({ where: { taskId: task.id } });
+  res.json(list);
+});
+
+app.post('/api/tasks/:id/associations', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  const task = await prisma.task.findFirst({
+    where: {
+      id: req.params.id,
+      ...(user.organizationId ? { organizationId: user.organizationId } : { createdById: user.id }),
+    },
+  });
+  if (!task) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  const body = req.body as { relatedTaskId?: string; externalSystemId?: string; associationType?: string };
+  if (!body.relatedTaskId && !body.externalSystemId) {
+    res.status(400).json({ error: 'relatedTaskId or externalSystemId required' });
+    return;
+  }
+  const created = await prisma.taskAssociation.create({
+    data: {
+      taskId: task.id,
+      relatedTaskId: body.relatedTaskId ?? null,
+      externalSystemId: body.externalSystemId ?? null,
+      associationType: body.associationType?.trim() || 'related',
+    },
+  });
+  await prisma.taskActivityLog.create({
+    data: {
+      taskId: task.id,
+      actorId: user.id,
+      action: 'association_added',
+      detail: created.associationType,
+    },
+  });
+  res.status(201).json(created);
+});
+
+app.delete('/api/tasks/:id/associations/:associationId', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  const task = await prisma.task.findFirst({
+    where: {
+      id: req.params.id,
+      ...(user.organizationId ? { organizationId: user.organizationId } : { createdById: user.id }),
+    },
+  });
+  if (!task) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+  const assoc = await prisma.taskAssociation.findFirst({
+    where: { id: req.params.associationId, taskId: task.id },
+  });
+  if (!assoc) {
+    res.status(404).json({ error: 'Association not found' });
+    return;
+  }
+  await prisma.taskAssociation.delete({ where: { id: assoc.id } });
+  res.status(204).send();
 });
 
 app.post('/api/tasks/:id/lead', requireAuth, async (req: AuthedRequest, res) => {
@@ -606,6 +722,19 @@ app.post('/api/tasks/:id/request-lead', requireAuth, async (req: AuthedRequest, 
     res.status(403).json({ error: 'Not permitted to request lead' });
     return;
   }
+  const requestOnly = Boolean((req.body as { requestOnly?: boolean }).requestOnly);
+  if (requestOnly) {
+    await prisma.taskActivityLog.create({
+      data: {
+        taskId: existing.id,
+        actorId: user.id,
+        action: 'lead_request_submitted',
+        detail: 'User requested ownership transfer',
+      },
+    });
+    res.json({ ok: true, status: 'requested' });
+    return;
+  }
   const prev = existing.leadUserId;
   const task = await prisma.task.update({
     where: { id: existing.id },
@@ -636,7 +765,64 @@ app.post('/api/tasks/sync-mock', requireAuth, async (req: AuthedRequest, res) =>
   const raw = req.body as { subscriptionIds?: string[] };
   const subscriptionIds = Array.isArray(raw.subscriptionIds) ? raw.subscriptionIds : [];
   const remote = await mockProvider.fetchTasks(user.id, subscriptionIds);
-  res.json({ merged: remote.length, message: 'Mock provider returned no tasks; wire Ciright APIs here.' });
+  const orgScope = user.organizationId ?? null;
+  let merged = 0;
+
+  for (const item of remote) {
+    const externalKey = item.externalTaskId ?? item.id;
+    const existing = await prisma.task.findFirst({
+      where: {
+        organizationId: orgScope,
+        externalTaskId: externalKey,
+      },
+    });
+    if (existing) {
+      await prisma.task.update({
+        where: { id: existing.id },
+        data: {
+          name: item.name,
+          description: item.description ?? null,
+          priorityQuadrant: item.priorityQuadrant,
+          timeEstimate: clampInt(item.timeEstimate, 1, 10, existing.timeEstimate),
+          complexity: clampInt(item.complexity, 1, 10, existing.complexity),
+          difficulty: clampInt(item.difficulty, 1, 10, existing.difficulty),
+          phase: item.phase,
+          dueDateTime: item.dueDateTime ?? null,
+          leadUserId: item.leadUserId ?? existing.leadUserId,
+          associatedUserIds: item.associatedUserIds ?? existing.associatedUserIds,
+          subscriptionId: item.subscriptionId ?? existing.subscriptionId,
+          sourceSystem: item.sourceSystem ?? existing.sourceSystem,
+          isCCRComplete: !!item.isCCRComplete,
+          isInactive: !!item.isInactive,
+        },
+      });
+    } else {
+      await prisma.task.create({
+        data: {
+          organizationId: orgScope,
+          subscriptionId: item.subscriptionId ?? null,
+          sourceSystem: item.sourceSystem ?? 'mock-ciright',
+          externalTaskId: externalKey,
+          name: item.name,
+          description: item.description ?? null,
+          priorityQuadrant: item.priorityQuadrant,
+          timeEstimate: clampInt(item.timeEstimate, 1, 10, 5),
+          complexity: clampInt(item.complexity, 1, 10, 5),
+          difficulty: clampInt(item.difficulty, 1, 10, 5),
+          phase: item.phase,
+          dueDateTime: item.dueDateTime ?? null,
+          leadUserId: item.leadUserId ?? user.id,
+          associatedUserIds: item.associatedUserIds ?? [],
+          isCCRComplete: !!item.isCCRComplete,
+          isInactive: !!item.isInactive,
+          createdById: user.id,
+        },
+      });
+    }
+    merged += 1;
+  }
+
+  res.json({ merged, message: `Merged ${merged} mock task(s) from ${mockProvider.providerName}` });
 });
 
 app.get('/api/admin/summary', requireAuth, async (req: AuthedRequest, res) => {
@@ -687,6 +873,175 @@ app.get('/api/admin/summary', requireAuth, async (req: AuthedRequest, res) => {
     upcomingDue: upcoming.slice(0, 25),
     roster: users,
   });
+});
+
+app.get('/api/admin/users', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  if (!user.organizationId || !(await checkOrgAdmin(user.id, user.organizationId))) {
+    res.status(403).json({ error: 'Admin only' });
+    return;
+  }
+  const members = await prisma.membership.findMany({
+    where: { organizationId: user.organizationId },
+    include: {
+      user: { select: { id: true, name: true, email: true } },
+    },
+    orderBy: { user: { name: 'asc' } },
+  });
+  res.json(
+    members.map((m) => ({
+      userId: m.userId,
+      name: m.user.name,
+      email: m.user.email,
+      role: m.role,
+    })),
+  );
+});
+
+app.patch('/api/admin/users/:userId/role', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  if (!user.organizationId || !(await checkOrgAdmin(user.id, user.organizationId))) {
+    res.status(403).json({ error: 'Admin only' });
+    return;
+  }
+  const role = String((req.body as { role?: string }).role ?? '');
+  if (!['ADMIN', 'MEMBER'].includes(role)) {
+    res.status(400).json({ error: 'role must be ADMIN or MEMBER' });
+    return;
+  }
+  const updated = await prisma.membership.update({
+    where: {
+      userId_organizationId: {
+        userId: req.params.userId,
+        organizationId: user.organizationId,
+      },
+    },
+    data: { role: role as MembershipRole },
+  });
+  res.json(updated);
+});
+
+app.post('/api/admin/subscriptions', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  if (!user.organizationId || !(await checkOrgAdmin(user.id, user.organizationId))) {
+    res.status(403).json({ error: 'Admin only' });
+    return;
+  }
+  const body = req.body as { name?: string; sourceSystem?: string };
+  if (!body.name?.trim()) {
+    res.status(400).json({ error: 'name required' });
+    return;
+  }
+  const created = await prisma.subscription.create({
+    data: {
+      organizationId: user.organizationId,
+      name: body.name.trim(),
+      sourceSystem: body.sourceSystem?.trim() || 'manual',
+    },
+  });
+  res.status(201).json(created);
+});
+
+app.patch('/api/admin/subscriptions/:id', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  if (!user.organizationId || !(await checkOrgAdmin(user.id, user.organizationId))) {
+    res.status(403).json({ error: 'Admin only' });
+    return;
+  }
+  const existing = await prisma.subscription.findFirst({
+    where: { id: req.params.id, organizationId: user.organizationId },
+  });
+  if (!existing) {
+    res.status(404).json({ error: 'Subscription not found' });
+    return;
+  }
+  const body = req.body as { name?: string; sourceSystem?: string };
+  const updated = await prisma.subscription.update({
+    where: { id: existing.id },
+    data: {
+      name: body.name?.trim() || existing.name,
+      sourceSystem: body.sourceSystem?.trim() || existing.sourceSystem,
+    },
+  });
+  res.json(updated);
+});
+
+app.delete('/api/admin/subscriptions/:id', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  if (!user.organizationId || !(await checkOrgAdmin(user.id, user.organizationId))) {
+    res.status(403).json({ error: 'Admin only' });
+    return;
+  }
+  const existing = await prisma.subscription.findFirst({
+    where: { id: req.params.id, organizationId: user.organizationId },
+  });
+  if (!existing) {
+    res.status(404).json({ error: 'Subscription not found' });
+    return;
+  }
+  await prisma.subscription.delete({ where: { id: existing.id } });
+  res.status(204).send();
+});
+
+app.get('/api/admin/teams', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  if (!user.organizationId || !(await checkOrgAdmin(user.id, user.organizationId))) {
+    res.status(403).json({ error: 'Admin only' });
+    return;
+  }
+  const teams = await listTeams(user.organizationId);
+  res.json(teams);
+});
+
+app.post('/api/admin/teams', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  if (!user.organizationId || !(await checkOrgAdmin(user.id, user.organizationId))) {
+    res.status(403).json({ error: 'Admin only' });
+    return;
+  }
+  const body = req.body as { name?: string; memberUserIds?: string[] };
+  if (!body.name?.trim()) {
+    res.status(400).json({ error: 'name required' });
+    return;
+  }
+  const team = await createTeam({
+    organizationId: user.organizationId,
+    name: body.name.trim(),
+    memberUserIds: Array.isArray(body.memberUserIds) ? body.memberUserIds : [],
+  });
+  res.status(201).json(team);
+});
+
+app.patch('/api/admin/teams/:id', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  if (!user.organizationId || !(await checkOrgAdmin(user.id, user.organizationId))) {
+    res.status(403).json({ error: 'Admin only' });
+    return;
+  }
+  const body = req.body as { name?: string; memberUserIds?: string[] };
+  const updated = await updateTeam(req.params.id, user.organizationId, {
+    name: body.name?.trim(),
+    memberUserIds: Array.isArray(body.memberUserIds) ? body.memberUserIds : undefined,
+  });
+  if (!updated) {
+    res.status(404).json({ error: 'Team not found' });
+    return;
+  }
+  res.json(updated);
+});
+
+app.delete('/api/admin/teams/:id', requireAuth, async (req: AuthedRequest, res) => {
+  const user = req.user!;
+  if (!user.organizationId || !(await checkOrgAdmin(user.id, user.organizationId))) {
+    res.status(403).json({ error: 'Admin only' });
+    return;
+  }
+  const ok = await deleteTeam(req.params.id, user.organizationId);
+  if (!ok) {
+    res.status(404).json({ error: 'Team not found' });
+    return;
+  }
+  res.status(204).send();
 });
 
 app.listen(PORT, () => {

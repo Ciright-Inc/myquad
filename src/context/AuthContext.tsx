@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import {
   createContext,
   useCallback,
@@ -24,10 +25,10 @@ const STORAGE_TOKEN = "myquad_token";
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(STORAGE_TOKEN));
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isOrgAdmin, setIsOrgAdmin] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !!localStorage.getItem(STORAGE_TOKEN));
 
   const refreshMe = useCallback(async () => {
     const savedToken = localStorage.getItem(STORAGE_TOKEN);
@@ -38,25 +39,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem(STORAGE_TOKEN);
-    setToken(savedToken);
-    if (!savedToken) {
-      setLoading(false);
+    if (!token) {
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshMe()
       .catch(() => {
         localStorage.removeItem(STORAGE_TOKEN);
         setToken(null);
+        setLoading(false);
         setIsOrgAdmin(false);
         setUser(null);
       })
       .finally(() => setLoading(false));
-  }, [refreshMe]);
+  }, [refreshMe, token]);
 
   const setSession = useCallback((nextToken: string, admin = false, nextUser: SessionUser | null = null) => {
     localStorage.setItem(STORAGE_TOKEN, nextToken);
     setToken(nextToken);
+    setLoading(false);
     setIsOrgAdmin(admin);
     setUser(nextUser);
   }, []);
@@ -64,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_TOKEN);
     setToken(null);
+    setLoading(false);
     setIsOrgAdmin(false);
     setUser(null);
   }, []);
