@@ -394,26 +394,27 @@ body {
   letter-spacing: 0.05em;
 }
 
+/* Q1 top-right (urgent + important) … Q4 bottom-left; matches bubble placement in quadrant.ts */
 .mq-q1 {
-  left: 0.85rem;
+  right: 0.85rem;
   top: 2.2rem;
   color: #d4112a;
 }
 
 .mq-q2 {
-  right: 0.85rem;
+  left: 0.85rem;
   top: 2.2rem;
   color: #1a3fd8;
 }
 
-.mq-q4 {
-  left: 0.85rem;
+.mq-q3 {
+  right: 0.85rem;
   bottom: 0.9rem;
   color: #435c73;
 }
 
-.mq-q3 {
-  right: 0.85rem;
+.mq-q4 {
+  left: 0.85rem;
   bottom: 0.9rem;
   color: #435c73;
 }

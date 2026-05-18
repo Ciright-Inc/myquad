@@ -37,13 +37,15 @@ function normalized(input: number, min: number, max: number): number {
   return Math.max(0, Math.min(1, (input - min) / (max - min)));
 }
 
+/** X/Y are percent within the quadrant cell (important ↑, urgent →): Q1 top-right … Q4 bottom-left. */
 export function calculateXPosition(task: TaskListItem): number {
   const importance = normalized(task.complexity * 0.55 + task.difficulty * 0.45, 1, 10);
   const urgency = normalized(calculateUrgencyScore(task.dueDateTime), 1, 10);
   const workload = normalized(calculateTaskWeight(task), 1, 10);
   const intra = Math.max(0.12, Math.min(0.88, importance * 0.62 + workload * 0.23 + urgency * 0.15));
   const q = calculateQuadrant(task);
-  return q === 1 || q === 2 ? 50 + intra * 50 : intra * 50;
+  const rightHalf = q === 1 || q === 3;
+  return rightHalf ? 50 + intra * 50 : intra * 50;
 }
 
 export function calculateYPosition(task: TaskListItem): number {
@@ -52,5 +54,6 @@ export function calculateYPosition(task: TaskListItem): number {
   const workload = normalized(calculateTaskWeight(task), 1, 10);
   const intra = Math.max(0.12, Math.min(0.88, urgency * 0.64 + workload * 0.22 + complexity * 0.14));
   const q = calculateQuadrant(task);
-  return q === 1 || q === 4 ? intra * 50 : 50 + intra * 50;
+  const topHalf = q === 1 || q === 2;
+  return topHalf ? intra * 50 : 50 + intra * 50;
 }
