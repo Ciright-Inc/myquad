@@ -140,10 +140,14 @@ Frontend URL:
 
 ## API proxy notes (Nginx)
 
-Frontend Nginx config proxies `/api/*` to:
+Frontend Nginx proxies `/api/*` to `API_UPSTREAM` (default `http://127.0.0.1:3001`).
 
-- `http://host.docker.internal:3001`
+Set when running the frontend container, for example:
 
-This means backend should be available on host machine at port `3001`.
+```bash
+docker run -d --name myquad-frontend -p 8080:80 \
+  -e API_UPSTREAM=http://myquad-backend:3001 \
+  myquad-frontend
+```
 
-If you run backend in another container/network, update `nginx.conf` accordingly and rebuild frontend image.
+On **AWS/Linux production**, do not use `host.docker.internal`. Point `API_UPSTREAM` at your API service (same host `127.0.0.1:3001`, ECS service name, or ALB internal URL).

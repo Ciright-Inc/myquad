@@ -85,11 +85,16 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
 
-  const res = await fetch(resolveApiUrl(path), {
-    method: options.method ?? "GET",
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(resolveApiUrl(path), {
+      method: options.method ?? "GET",
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+  } catch {
+    throw new Error("Cannot reach API server. Contact support if this persists.");
+  }
 
   if (res.status === 204) {
     return null as T;
