@@ -189,8 +189,12 @@ Vite proxies `/api` to `http://localhost:3001` automatically.
 
 **Backend variables:** `DATABASE_URL` (reference Postgres), `JWT_SECRET`, Ciright IDs.
 
-**Frontend variables:** `BACKEND_URL=https://api.myquad.ciright.com` (nginx proxies `/api/*` here).  
+**Frontend variables:** `BACKEND_URL=https://api.myquad.ciright.com` (no trailing slash).  
+Nginx forwards `/api/auth/login` → `https://api.myquad.ciright.com/api/auth/login`.  
 Also accepts `API_UPSTREAM` instead of `BACKEND_URL`.
+
+For lower latency inside Railway, you can use private networking instead:  
+`API_UPSTREAM=http://${{myquad-backend.RAILWAY_PRIVATE_DOMAIN}}:${{myquad-backend.PORT}}`
 
 In each service: **Settings → Config-as-code → Config file path** must match the row above.  
 If the frontend uses the root `Dockerfile` by mistake, deploy will run Prisma and fail with `localhost:5432`.
