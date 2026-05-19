@@ -54,7 +54,9 @@ export function SignInPage() {
       {cirightLoading ? (
         <p className="mt-3 text-sm text-black/50">Connecting to Ciright…</p>
       ) : cirightError ? (
-        <p className="mt-3 rounded-lg bg-[#fe0f26]/10 px-3 py-2 text-sm text-[#fe0f26]">{cirightError}</p>
+        <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-900">
+          {cirightError} You can still sign in below if the API is reachable.
+        </p>
       ) : cirightApp ? (
         <p className="mt-3 rounded-lg bg-[#4ea7f4]/10 px-3 py-2 text-sm text-[#2c4f66]">
           Ciright app: <span className="font-semibold">{cirightApp.appName.trim()}</span>
@@ -99,7 +101,7 @@ export function SignInPage() {
         <button
           type="submit"
           className="mq-btn-primary w-full py-2.5 disabled:cursor-not-allowed disabled:opacity-70"
-          disabled={busy || cirightLoading || !!cirightError}
+          disabled={busy || cirightLoading}
         >
           {busy ? "Signing in..." : "Continue"}
         </button>

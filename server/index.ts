@@ -268,12 +268,26 @@ app.post('/api/auth/login', async (req, res) => {
   if (cirightUserLoginEnabled()) {
     const ciright = await cirightUserLogin(email, password);
     if (ciright.ok) {
-      const user = await ensureWorkspaceUserAfterCirightLogin(email, password);
-      await issueAuthResponse(res, user);
-      return;
+      try {
+        const user = await ensureWorkspaceUserAfterCirightLogin(email, password);
+        await issueAuthResponse(res, user);
+        return;
+      } catch (err) {
+        console.error('Ciright user provision failed:', err);
+        res.status(500).json({
+          error: 'Ciright sign-in succeeded but workspace setup failed. Ensure the database is migrated.',
+        });
+        return;
+      }
     }
     if (ciright.reason === 'invalid_credentials') {
       res.status(401).json({ error: 'Invalid Ciright username or password' });
+      return;
+    }
+    if (ciright.reason === 'unavailable') {
+      res.status(503).json({
+        error: 'Cannot reach Ciright sign-in from the server. Check outbound HTTPS and API proxy.',
+      });
       return;
     }
   }

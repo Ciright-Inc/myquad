@@ -36,6 +36,7 @@ export async function cirightUserLogin(username: string, password: string): Prom
       },
       body: body.toString(),
       redirect: 'manual',
+      signal: AbortSignal.timeout(25_000),
     });
 
     const location = res.headers.get('location') ?? '';
@@ -100,6 +101,7 @@ export async function cirightAppLogin(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(60_000),
   });
 
   const contentType = res.headers.get('content-type') ?? '';

@@ -46,9 +46,14 @@ export function CirightProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Ciright login failed";
       setError(message);
-      setApp(null);
-      storeCirightApp(null);
-      return null;
+      const cached = loadStoredCirightApp();
+      if (cached) {
+        setApp(cached);
+      } else {
+        setApp(null);
+        storeCirightApp(null);
+      }
+      return cached;
     } finally {
       setLoading(false);
     }
