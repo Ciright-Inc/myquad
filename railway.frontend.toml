@@ -1,0 +1,9 @@
+# Railway: set this as the config file path on the *frontend* service (myquad-frontend).
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.frontend"
+
+[deploy]
+healthcheckPath = "/"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"

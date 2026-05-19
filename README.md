@@ -180,6 +180,23 @@ Vite proxies `/api` to `http://localhost:3001` automatically.
 
 ## Deploy on Railway
 
+### Two services (recommended for myquad.ciright.com + api.myquad.ciright.com)
+
+| Service | Domain | Dockerfile | Config file (Railway Settings) |
+|---------|--------|------------|--------------------------------|
+| `myquad-backend` | `api.myquad.ciright.com` | `Dockerfile.backend` | `railway.backend.toml` |
+| `myquad-frontend` | `myquad.ciright.com` | `Dockerfile.frontend` | `railway.frontend.toml` |
+
+**Backend variables:** `DATABASE_URL` (reference Postgres), `JWT_SECRET`, Ciright IDs.
+
+**Frontend variables:** `BACKEND_URL=https://api.myquad.ciright.com` (nginx proxies `/api/*` here).  
+Also accepts `API_UPSTREAM` instead of `BACKEND_URL`.
+
+In each service: **Settings → Config-as-code → Config file path** must match the row above.  
+If the frontend uses the root `Dockerfile` by mistake, deploy will run Prisma and fail with `localhost:5432`.
+
+### Single service (simpler)
+
 Use **one** Railway service with the root `Dockerfile` (not `Dockerfile.frontend`). That image serves the React app and API on the same port, which is what Railway expects.
 
 ### Setup

@@ -8,11 +8,14 @@ COPY package*.json ./
 COPY prisma ./prisma
 
 RUN npm ci --ignore-scripts
-RUN npx prisma generate --schema=./prisma/schema.prisma
+RUN DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build" \
+  npx prisma generate --schema=./prisma/schema.prisma
 
 COPY server ./server
 COPY tsconfig*.json ./
 
-EXPOSE 3001
+ENV NODE_ENV=production
 
-CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx server/index.ts"]
+COPY scripts/docker-start.sh /docker-start.sh
+RUN chmod +x /docker-start.sh
+CMD ["/docker-start.sh"]

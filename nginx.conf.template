@@ -1,5 +1,5 @@
 server {
-  listen 80;
+  listen ${PORT};
   server_name _;
 
   root /usr/share/nginx/html;
@@ -15,7 +15,7 @@ server {
     proxy_connect_timeout 75s;
     proxy_send_timeout 120s;
     proxy_read_timeout 120s;
-    proxy_set_header Host $host;
+    proxy_set_header Host $proxy_host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;

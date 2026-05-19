@@ -1,6 +1,7 @@
+# Railway: set this as the config file path on the *backend* service (myquad-backend).
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
+dockerfilePath = "Dockerfile.backend"
 
 [deploy]
 healthcheckPath = "/api/health"
