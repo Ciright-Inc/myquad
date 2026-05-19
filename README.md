@@ -186,9 +186,10 @@ Use **one** Railway service with the root `Dockerfile` (not `Dockerfile.frontend
 
 1. Create a Railway project from this repo.
 2. Add a **PostgreSQL** plugin and attach it to the service (Railway sets `DATABASE_URL`).
-3. In the service **Variables**, set:
-   - `JWT_SECRET` — a long random string (required)
-   - `DATABASE_URL` — usually auto-set by the Postgres plugin
+3. In the service **Variables** (required — deploy fails without these):
+   - `DATABASE_URL` — from the Postgres plugin (**Reference** → `${{Postgres.DATABASE_URL}}` or similar)
+   - `JWT_SECRET` — a long random string
+   - If you see `Environment variable not found: DATABASE_URL`, the Postgres plugin is not linked to this service yet.
 4. **Settings → Deploy**:
    - Builder: Dockerfile
    - Dockerfile path: `Dockerfile` (root)
