@@ -11,6 +11,12 @@ import { prisma } from './db.js';
 import type { AuthedRequest } from './middleware/requireAuth.js';
 import { requireAuth } from './middleware/requireAuth.js';
 import { MockWorkItemProvider } from './providers/mock-work-item-provider.js';
+import {
+  cirightAppLogin,
+  cirightLoginDefaults,
+  cirightUserLogin,
+  cirightUserLoginEnabled,
+} from './ciright.js';
 import { createTeam, deleteTeam, listTeams, updateTeam } from './teamStore.js';
 
 const mockProvider = new MockWorkItemProvider();
@@ -54,6 +60,23 @@ app.get('/', (_req, res) => {
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, provider: mockProvider.providerName });
+});
+
+/** Proxies Ciright commonadmin login (m3440396) — avoids browser CORS on myciright.com */
+app.post('/api/ciright/login', async (req, res) => {
+  const defaults = cirightLoginDefaults();
+  const body = req.body as Partial<typeof defaults>;
+  const payload = {
+    subscriptionId: String(body.subscriptionId ?? defaults.subscriptionId),
+    verticalId: String(body.verticalId ?? defaults.verticalId),
+    appId: String(body.appId ?? defaults.appId),
+  };
+  try {
+    const result = await cirightAppLogin(payload);
+    res.json(result);
+  } catch (err) {
+    res.status(502).json({ error: err instanceof Error ? err.message : 'Ciright login failed' });
+  }
 });
 
 app.post('/api/auth/register-individual', async (req, res) => {
@@ -158,17 +181,17 @@ app.post('/api/auth/register-enterprise', async (req, res) => {
   });
 });
 
-app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body as { email?: string; password?: string };
-  if (!email || !password) {
-    res.status(400).json({ error: 'email and password required' });
-    return;
-  }
-  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
-    res.status(401).json({ error: 'Invalid credentials' });
-    return;
-  }
+async function issueAuthResponse(
+  res: express.Response,
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    accountType: AccountType;
+    organizationId: string | null;
+    phone: string | null;
+  },
+) {
   let orgAdmin = false;
   if (user.organizationId) {
     orgAdmin = await checkOrgAdmin(user.id, user.organizationId);
@@ -186,6 +209,76 @@ app.post('/api/auth/login', async (req, res) => {
       phone: user.phone,
     },
   });
+}
+
+async function ensureWorkspaceUserAfterCirightLogin(email: string, password: string) {
+  const normalized = email.toLowerCase();
+  const passwordHash = await bcrypt.hash(password, 10);
+  const orgId = process.env.CIRIGHT_DEFAULT_ORG_ID?.trim() ?? 'seed-org-ciright-demo';
+  const org = await prisma.organization.findUnique({ where: { id: orgId } });
+
+  const existing = await prisma.user.findUnique({ where: { email: normalized } });
+  if (existing) {
+    return prisma.user.update({
+      where: { id: existing.id },
+      data: { passwordHash },
+    });
+  }
+
+  const created = await prisma.user.create({
+    data: {
+      email: normalized,
+      passwordHash,
+      name: normalized.split('@')[0].replace(/\./g, ' '),
+      accountType: org ? AccountType.ENTERPRISE : AccountType.INDIVIDUAL,
+      organizationId: org?.id ?? null,
+    },
+  });
+
+  if (org) {
+    await prisma.membership.upsert({
+      where: { userId_organizationId: { userId: created.id, organizationId: org.id } },
+      update: {},
+      create: {
+        userId: created.id,
+        organizationId: org.id,
+        role: MembershipRole.MEMBER,
+      },
+    });
+  }
+
+  return created;
+}
+
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body as { email?: string; password?: string };
+  if (!email || !password) {
+    res.status(400).json({ error: 'email and password required' });
+    return;
+  }
+
+  const normalizedEmail = email.toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+
+  if (existing && (await bcrypt.compare(password, existing.passwordHash))) {
+    await issueAuthResponse(res, existing);
+    return;
+  }
+
+  if (cirightUserLoginEnabled()) {
+    const ciright = await cirightUserLogin(email, password);
+    if (ciright.ok) {
+      const user = await ensureWorkspaceUserAfterCirightLogin(email, password);
+      await issueAuthResponse(res, user);
+      return;
+    }
+    if (ciright.reason === 'invalid_credentials') {
+      res.status(401).json({ error: 'Invalid Ciright username or password' });
+      return;
+    }
+  }
+
+  res.status(401).json({ error: 'Invalid credentials' });
 });
 
 app.get('/api/me', requireAuth, async (req: AuthedRequest, res) => {

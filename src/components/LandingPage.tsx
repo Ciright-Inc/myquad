@@ -15,12 +15,12 @@ export function LandingPage() {
                 <p className="text-xs text-white/70">Priority Intelligence Platform</p>
               </div>
             </div>
-            <Link
+            {/* <Link
               to="/sign-in"
               className="inline-flex rounded-lg border border-white/25 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
             >
               Existing user
-            </Link>
+            </Link> */}
           </header>
 
           <div className="mt-12 grid flex-1 items-center gap-10 pb-8 lg:grid-cols-[1.1fr_0.9fr]">
@@ -39,12 +39,12 @@ export function LandingPage() {
                 <Link to="/sign-in" className="mq-btn-primary inline-flex px-6 py-3 text-sm">
                   Sign in
                 </Link>
-                <Link
+                {/* <Link
                   to="/sign-up"
                   className="inline-flex rounded-lg border border-white/25 px-6 py-3 text-sm font-semibold text-white hover:bg-white/10"
                 >
                   Create account
-                </Link>
+                </Link> */}
               </div>
 
               <div className="mt-8 grid max-w-xl grid-cols-3 gap-3">

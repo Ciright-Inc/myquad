@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AtSign, LockKeyhole } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useCiright } from "@/context/CirightContext";
 import { apiRequest, type SessionUser } from "@/lib/api";
 import { loginSchema, inputClass, toFieldErrors, type FieldErrors } from "@/lib/validation";
 import { buildIdentityPayload } from "@/lib/identity";
@@ -14,6 +15,7 @@ type LoginResponse = {
 export function SignInPage() {
   const navigate = useNavigate();
   const { setSession } = useAuth();
+  const { app: cirightApp, loading: cirightLoading, error: cirightError } = useCiright();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -48,7 +50,16 @@ export function SignInPage() {
     <div>
       <p className="text-xs font-semibold uppercase tracking-[0.15em] text-[#4ea7f4]">Welcome back</p>
       <h1 className="mt-2 text-3xl font-semibold text-[#060a32]">Sign in</h1>
-      <p className="mt-2 text-sm text-black/60">Use your workspace credentials to continue.</p>
+      <p className="mt-2 text-sm text-black/60">Sign in with your myciright.com email and password.</p>
+      {cirightLoading ? (
+        <p className="mt-3 text-sm text-black/50">Connecting to Ciright…</p>
+      ) : cirightError ? (
+        <p className="mt-3 rounded-lg bg-[#fe0f26]/10 px-3 py-2 text-sm text-[#fe0f26]">{cirightError}</p>
+      ) : cirightApp ? (
+        <p className="mt-3 rounded-lg bg-[#4ea7f4]/10 px-3 py-2 text-sm text-[#2c4f66]">
+          Ciright app: <span className="font-semibold">{cirightApp.appName.trim()}</span>
+        </p>
+      ) : null}
       {error ? <p className="mt-3 rounded-lg bg-[#fe0f26]/10 px-3 py-2 text-sm text-[#fe0f26]">{error}</p> : null}
       <form onSubmit={submit} className="mt-4 space-y-3">
         <div className="space-y-1">
@@ -85,16 +96,20 @@ export function SignInPage() {
           </div>
           {fieldErrors.password ? <p className="text-xs text-[#fe0f26]">{fieldErrors.password}</p> : null}
         </div>
-        <button type="submit" className="mq-btn-primary w-full py-2.5 disabled:cursor-not-allowed disabled:opacity-70" disabled={busy}>
+        <button
+          type="submit"
+          className="mq-btn-primary w-full py-2.5 disabled:cursor-not-allowed disabled:opacity-70"
+          disabled={busy || cirightLoading || !!cirightError}
+        >
           {busy ? "Signing in..." : "Continue"}
         </button>
       </form>
-      <p className="mt-5 text-sm text-black/60">
+      {/* <p className="mt-5 text-sm text-black/60">
         New here?{" "}
         <Link to="/sign-up" className="font-semibold text-[#0c34da]">
           Create account
         </Link>
-      </p>
+      </p> */}
     </div>
   );
 }
