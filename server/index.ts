@@ -1,10 +1,12 @@
+import fs from 'node:fs';
+import { promises as fsPromises } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import 'dotenv/config';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import { AccountType, MembershipRole } from '@prisma/client';
 import { signToken } from './authTokens.js';
 import { prisma } from './db.js';
@@ -21,6 +23,9 @@ import { createTeam, deleteTeam, listTeams, updateTeam } from './teamStore.js';
 
 const mockProvider = new MockWorkItemProvider();
 const PORT = Number(process.env.PORT ?? 3001);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const distDir = path.resolve(__dirname, '../dist');
+const hasFrontend = fs.existsSync(path.join(distDir, 'index.html'));
 const uploadDir = path.join(process.cwd(), 'uploads');
 
 async function checkOrgAdmin(userId: string, organizationId: string | null): Promise<boolean> {
@@ -49,14 +54,16 @@ app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
 app.use('/uploads', express.static(uploadDir));
 
-/** Helps confirm this process is the MyQuad API (not another app on the same port). */
-app.get('/', (_req, res) => {
-  res.json({
-    service: 'myquad-api',
-    health: '/api/health',
-    hint: 'Angular UI runs on http://localhost:4200 (npm run dev:ng); API is JSON-only on this port.',
+/** API-only root when running without a built frontend (local API dev). */
+if (!hasFrontend) {
+  app.get('/', (_req, res) => {
+    res.json({
+      service: 'myquad-api',
+      health: '/api/health',
+      hint: 'Run npm run dev for the React UI, or deploy the production Docker image with dist/.',
+    });
   });
-});
+}
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, provider: mockProvider.providerName });
@@ -651,8 +658,8 @@ app.post('/api/tasks/:id/documents', requireAuth, async (req: AuthedRequest, res
     const diskName = `${token}-${safeName}`;
     const payload = contentBase64.includes(',') ? contentBase64.split(',')[1] : contentBase64;
     const binary = Buffer.from(payload, 'base64');
-    await fs.mkdir(uploadDir, { recursive: true });
-    await fs.writeFile(path.join(uploadDir, diskName), binary);
+    await fsPromises.mkdir(uploadDir, { recursive: true });
+    await fsPromises.writeFile(path.join(uploadDir, diskName), binary);
     finalUrl = `/uploads/${diskName}`;
   }
   const doc = await prisma.taskDocument.create({
@@ -1151,6 +1158,14 @@ app.delete('/api/admin/teams/:id', requireAuth, async (req: AuthedRequest, res) 
   res.status(204).send();
 });
 
-app.listen(PORT, () => {
-  console.log(`[MyQuad] API listening on http://localhost:${PORT} (server/index.ts)`);
+if (hasFrontend) {
+  app.use(express.static(distDir, { index: false }));
+  app.get(/^(?!\/api(\/|$)).*/, (_req, res) => {
+    res.sendFile(path.join(distDir, 'index.html'));
+  });
+}
+
+app.listen(PORT, '0.0.0.0', () => {
+  const mode = hasFrontend ? 'web+api' : 'api-only';
+  console.log(`[MyQuad] ${mode} listening on http://0.0.0.0:${PORT}`);
 });

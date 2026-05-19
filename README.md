@@ -94,10 +94,25 @@ This repo includes two Docker images:
 - `Dockerfile.backend` for API (`server/index.ts`)
 - `Dockerfile.frontend` for React app (served by Nginx)
 
+### Quick start (recommended)
+
+From the project root:
+
+```bash
+docker compose up --build -d
+```
+
+Then open:
+
+- Frontend: `http://localhost:8080`
+- API health: `http://localhost:3001/api/health`
+
+If login shows **502 Bad Gateway**, the frontend container cannot reach the API. With `docker compose`, set `API_UPSTREAM=http://backend:3001` on the frontend service and ensure `backend` is running (`docker compose ps`).
+
 ### Prerequisites
 
 - Docker installed and running
-- PostgreSQL reachable from backend container
+- PostgreSQL reachable from backend container (included in `docker-compose.yml`)
 
 ### 1) Build images
 
@@ -140,7 +155,7 @@ Frontend URL:
 
 ## API proxy notes (Nginx)
 
-Frontend Nginx proxies `/api/*` to `API_UPSTREAM` (default `http://127.0.0.1:3001`).
+The frontend image uses `nginx.conf.template` and proxies `/api/*` to `API_UPSTREAM` (default `http://127.0.0.1:3001`).
 
 Set when running the frontend container, for example:
 
@@ -151,3 +166,50 @@ docker run -d --name myquad-frontend -p 8080:80 \
 ```
 
 On **AWS/Linux production**, do not use `host.docker.internal`. Point `API_UPSTREAM` at your API service (same host `127.0.0.1:3001`, ECS service name, or ALB internal URL).
+
+## Local development (no Docker)
+
+```bash
+cp .env.example .env   # if present; set DATABASE_URL
+npm ci
+npm run db:deploy
+npm run dev            # Vite + API on :5173 and :3001
+```
+
+Vite proxies `/api` to `http://localhost:3001` automatically.
+
+## Deploy on Railway
+
+Use **one** Railway service with the root `Dockerfile` (not `Dockerfile.frontend`). That image serves the React app and API on the same port, which is what Railway expects.
+
+### Setup
+
+1. Create a Railway project from this repo.
+2. Add a **PostgreSQL** plugin and attach it to the service (Railway sets `DATABASE_URL`).
+3. In the service **Variables**, set:
+   - `JWT_SECRET` — a long random string (required)
+   - `DATABASE_URL` — usually auto-set by the Postgres plugin
+4. **Settings → Deploy**:
+   - Builder: Dockerfile
+   - Dockerfile path: `Dockerfile` (root)
+5. **Do not hard-code port 8080** in Railway networking. Railway injects `PORT` (often `8080`); the app already listens on `process.env.PORT`. If you forced a custom port that does not match `$PORT`, the deploy will fail or return 502.
+
+### Verify
+
+After deploy, open your Railway URL:
+
+- `https://<your-app>.up.railway.app/api/health` → `{"ok":true,...}`
+- `https://<your-app>.up.railway.app/` → sign-in page
+
+### Why login showed 502 before
+
+`Dockerfile.frontend` runs **nginx on port 80** and proxies `/api` to `http://backend:3001`. On Railway there is no `backend` hostname unless you run a **second** service with private networking. A single frontend-only deploy always 502s on `/api/*`.
+
+The root `Dockerfile` fixes this by running Express on `$PORT` and serving both the UI and API.
+
+### Optional: two Railway services
+
+If you prefer separate frontend (nginx) and backend containers, you need:
+
+- Backend service: `Dockerfile.backend`, Postgres, `JWT_SECRET`
+- Frontend service: `Dockerfile.frontend` with `API_UPSTREAM` set to the backend’s **private** URL (e.g. `${{MyQuad API.RAILWAY_PRIVATE_DOMAIN}}`), and nginx must `listen` on `$PORT` — use the unified root `Dockerfile` instead.

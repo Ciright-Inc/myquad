@@ -69,6 +69,35 @@ type ApiOptions = {
   token?: string | null;
 };
 
+function formatApiError(status: number, payload: unknown): string {
+  const fromJson =
+    payload && typeof payload === "object" && "error" in payload
+      ? String((payload as { error?: string }).error ?? "")
+      : "";
+  const raw = fromJson || (typeof payload === "string" ? payload : "");
+
+  if (raw && !raw.trimStart().startsWith("<")) {
+    return raw.length > 240 ? `${raw.slice(0, 240)}…` : raw;
+  }
+
+  if (status === 502) {
+    return "The API server is unavailable (502). Start the backend or check the reverse-proxy target.";
+  }
+  if (status === 503) {
+    return "The API server is temporarily unavailable. Please try again shortly.";
+  }
+  if (status >= 500) {
+    return `Server error (${status}). Please try again later.`;
+  }
+  if (status === 401) {
+    return "Invalid email or password.";
+  }
+  if (status === 409) {
+    return "That email is already registered.";
+  }
+  return `Request failed (${status}).`;
+}
+
 export function resolveApiUrl(path: string): string {
   if (!path.startsWith("/")) return path;
 
@@ -101,12 +130,15 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
   }
 
   const contentType = res.headers.get("content-type") ?? "";
-  const data: unknown = contentType.includes("application/json")
-    ? await res.json()
-    : { error: (await res.text()).slice(0, 160) || "Non-JSON response from server" };
+  let data: unknown = null;
+  if (contentType.includes("application/json")) {
+    data = await res.json();
+  } else {
+    data = await res.text();
+  }
 
   if (!res.ok) {
-    throw new Error((data as { error?: string }).error ?? "API request failed");
+    throw new Error(formatApiError(res.status, data));
   }
   return data as T;
 }
