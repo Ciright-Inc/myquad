@@ -19,9 +19,9 @@ COPY package*.json ./
 COPY prisma ./prisma
 
 RUN npm ci --ignore-scripts
-# Build-time placeholder only; Railway must set real DATABASE_URL at runtime.
-ENV DATABASE_URL="postgresql://postgres:password@localhost:5432/myquad"
-RUN npx prisma generate --schema=./prisma/schema.prisma
+# Placeholder only for this RUN — do not bake localhost into the image (Railway must set DATABASE_URL).
+RUN DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build" \
+  npx prisma generate --schema=./prisma/schema.prisma
 
 COPY server ./server
 COPY tsconfig*.json ./
